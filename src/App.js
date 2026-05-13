@@ -50,16 +50,16 @@ const extractTextFromPDF = async (file) => {
    PRESET SEARCH QUERIES
 ═══════════════════════════════════════════════════ */
 const PRESET_SEARCHES = [
-  { id: "p1", label: "Microsoft Fabric Engineer", query: "Microsoft Fabric Data Engineer", icon: "⚡" },
-  { id: "p2", label: "Senior Data Engineer", query: "Senior Data Engineer Azure", icon: "🔷" },
-  { id: "p3", label: "AI Data Engineer", query: "AI Data Engineer Machine Learning", icon: "🤖" },
-  { id: "p4", label: "Azure Data Architect", query: "Azure Data Platform Architect", icon: "☁️" },
-  { id: "p5", label: "Fabric Analytics Architect", query: "Microsoft Fabric Analytics Architect", icon: "📊" },
-  { id: "p6", label: "Data Platform Engineer", query: "Data Platform Engineer Databricks Spark", icon: "🏗️" },
-  { id: "p7", label: "Cloud Data Engineer", query: "Cloud Data Engineer Azure Databricks", icon: "🌩️" },
-  { id: "p8", label: "Data Governance Engineer", query: "Data Governance Engineer Purview", icon: "🛡️" },
-  { id: "p9", label: "ML Data Engineer", query: "Machine Learning Data Engineer MLOps", icon: "🧠" },
-  { id: "p10", label: "Power BI Engineer", query: "Power BI Data Engineer Semantic Model", icon: "📈" },
+  { id: "p1", label: "Microsoft Fabric", query: "Microsoft Fabric Lakehouse data engineer", icon: "⚡" },
+  { id: "p2", label: "Azure Data Engineer", query: "Azure Synapse Databricks PySpark data engineer", icon: "🔷" },
+  { id: "p3", label: "AI Data Engineer", query: "AI agents LLM data engineer Python Azure", icon: "🤖" },
+  { id: "p4", label: "Data Architect", query: "Azure data architect medallion lakehouse cloud", icon: "☁️" },
+  { id: "p5", label: "Databricks Engineer", query: "Databricks PySpark Delta Lake data engineer", icon: "🧱" },
+  { id: "p6", label: "Snowflake Engineer", query: "Snowflake dbt SQL cloud data engineer", icon: "❄️" },
+  { id: "p7", label: "Data Governance", query: "data governance Purview metadata lineage engineer", icon: "🛡️" },
+  { id: "p8", label: "ML Platform Engineer", query: "MLflow MLOps machine learning platform Python", icon: "🧠" },
+  { id: "p9", label: "Power BI / Analytics", query: "Power BI semantic model DAX analytics engineer", icon: "📈" },
+  { id: "p10", label: "Cloud Data Platform", query: "AWS GCP Azure cloud data platform engineer", icon: "🌩️" },
 ];
 
 /* ═══════════════════════════════════════════════════
@@ -119,15 +119,38 @@ const MNC_COMPANIES = [
 ];
 
 /* ═══════════════════════════════════════════════════
+   SMART QUERY PROCESSOR
+═══════════════════════════════════════════════════ */
+const FILLER_WORDS = ["senior","junior","lead","principal","staff","developer","specialist","manager","expert","associate","consultant","professional"];
+const TECH_WORDS = ["microsoft fabric","azure","databricks","snowflake","pyspark","python","sql","power bi","purview","spark","kafka","airflow","dbt","mlflow","terraform","aws","gcp","lakehouse","delta lake","synapse","openai","llm","mlops","data engineer","data architect","data platform","analytics"];
+
+const smartQuery = (raw) => {
+  const lower = raw.toLowerCase().trim();
+  // If already skill-focused (contains tech words) return as-is
+  const hasTech = TECH_WORDS.some(t => lower.includes(t));
+  if (hasTech) return lower;
+  // Otherwise strip seniority/filler words to broaden results
+  const cleaned = lower.split(" ")
+    .filter(w => !FILLER_WORDS.includes(w))
+    .join(" ").trim();
+  return cleaned || lower;
+};
+
+const simplifyQuery = (raw) => {
+  // Keep only core tech terms for broadest fallback
+  const words = raw.toLowerCase().split(" ")
+    .filter(w => !FILLER_WORDS.includes(w) && w.length > 3);
+  return words.slice(0, 3).join(" ") || raw;
+};
+
+/* ═══════════════════════════════════════════════════
    ADZUNA API — free 1000/month, replaces JSearch
 ═══════════════════════════════════════════════════ */
 const ADZUNA_COUNTRY_MAP = {
   "us":"us","gb":"gb","ca":"ca","au":"au","de":"de","in":"in","sg":"sg","ae":"ae",
 };
 
-const searchRealJobs = async (query, dateFilter, country = "us") => {
-  const countryCode = ADZUNA_COUNTRY_MAP[country] || "us";
-  const daysMap = { "24h": 1, "1w": 7, "1m": 30 };
+const fetchAdzuna = async (query, countryCode, daysMap, dateFilter) => {
   const params = new URLSearchParams({
     app_id: getKeys().ADZUNA_APP_ID,
     app_key: getKeys().ADZUNA_APP_KEY,
@@ -136,16 +159,39 @@ const searchRealJobs = async (query, dateFilter, country = "us") => {
     max_days_old: String(daysMap[dateFilter] || 7),
     sort_by: "date",
   });
-  // Adzuna supports CORS from browser — no extra headers needed
-  const res = await fetch(
-    `https://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?${params}`
-  );
-  if (!res.ok) {
-    console.error("Adzuna error:", res.status, await res.text());
-    throw new Error("Adzuna API error: " + res.status);
-  }
+  const res = await fetch(`https://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?${params}`);
+  if (!res.ok) throw new Error("Adzuna API error: " + res.status);
   const data = await res.json();
-  return (data.results || []).map(job => normalizeAdzunaJob(job));
+  return data.results || [];
+};
+
+const searchRealJobs = async (query, dateFilter, country = "us") => {
+  const countryCode = ADZUNA_COUNTRY_MAP[country] || "us";
+  const daysMap = { "24h": 1, "1w": 7, "1m": 30 };
+
+  // Step 1: try smart cleaned query
+  const cleaned = smartQuery(query);
+  let results = await fetchAdzuna(cleaned, countryCode, daysMap, dateFilter);
+
+  // Step 2: if < 5 results, try simplified query
+  if (results.length < 5) {
+    const simple = simplifyQuery(query);
+    if (simple !== cleaned) {
+      const fallback = await fetchAdzuna(simple, countryCode, daysMap, dateFilter);
+      // Merge, deduplicate by id
+      const ids = new Set(results.map(r => r.id));
+      fallback.forEach(r => { if (!ids.has(r.id)) { results.push(r); ids.add(r.id); } });
+    }
+  }
+
+  // Step 3: if still < 5, broaden date range
+  if (results.length < 5 && dateFilter !== "1m") {
+    const broad = await fetchAdzuna(cleaned, countryCode, { "24h":7,"1w":30,"1m":30 }, dateFilter);
+    const ids = new Set(results.map(r => r.id));
+    broad.forEach(r => { if (!ids.has(r.id)) { results.push(r); ids.add(r.id); } });
+  }
+
+  return results.map(job => normalizeAdzunaJob(job));
 };
 
 const normalizeAdzunaJob = (job) => {
@@ -414,6 +460,7 @@ export default function App() {
   const [selectedPreset, setSelectedPreset] = useState(() => localStorage.getItem("dh_last_preset") || "");
   const [customQuery, setCustomQuery] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
+  const [showSearchHelp, setShowSearchHelp] = useState(false);
   const [customPresets, setCustomPresets] = useState(() => {
     try { return JSON.parse(localStorage.getItem("dh_custom_presets") || "[]"); }
     catch { return []; }
@@ -597,9 +644,14 @@ export default function App() {
     try {
       let results = [];
       if (searchMode === "jobboard") {
-        setSearchProgress("Scanning LinkedIn, Indeed & Glassdoor...");
+        const cleaned = smartQuery(searchQuery);
+        const msg = cleaned !== searchQuery.toLowerCase().trim()
+          ? `Searching for "${cleaned}" (optimized from "${searchQuery}")...`
+          : "Scanning LinkedIn, Indeed & Glassdoor...";
+        setSearchProgress(msg);
         results = await searchRealJobs(searchQuery, dateFilter, countryFilter);
-        if (results.length === 0) setSearchError("No jobs found. Try different keywords or expand date range.");
+        if (results.length === 0) setSearchError(`No jobs found for "${cleaned}". Try broader keywords or expand date range.`);
+        else if (results.length < 5) setSearchError(`Only ${results.length} results found — try broader keywords for more.`);
       } else {
         setSearchProgress(`Searching ${selectedCompanies.length} companies...`);
         const companies = MNC_COMPANIES.filter(c => selectedCompanies.includes(c.id));
@@ -935,11 +987,48 @@ export default function App() {
                       style={{padding:"5px 11px",borderRadius:20,fontSize:11,fontWeight:600,background:showCustomInput?"rgba(236,72,153,0.12)":"rgba(255,255,255,0.03)",border:`1px solid ${showCustomInput?"rgba(236,72,153,0.35)":"rgba(255,255,255,0.07)"}`,color:showCustomInput?"#f9a8d4":"rgba(255,255,255,0.32)",transition:"all .15s"}}>
                       + Custom
                     </button>
+                    <button onClick={()=>setShowSearchHelp(p=>!p)}
+                      style={{padding:"5px 10px",borderRadius:20,fontSize:11,fontWeight:600,background:showSearchHelp?"rgba(251,191,36,0.12)":"rgba(255,255,255,0.03)",border:`1px solid ${showSearchHelp?"rgba(251,191,36,0.35)":"rgba(255,255,255,0.07)"}`,color:showSearchHelp?"#fcd34d":"rgba(255,255,255,0.32)",transition:"all .15s"}}>
+                      ? Help
+                    </button>
                   </div>
+
+                  {/* Search Help Panel */}
+                  {showSearchHelp&&(
+                    <div className="fadeUp" style={{marginTop:10,padding:"14px 16px",background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.15)",borderRadius:12}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#fcd34d",marginBottom:10}}>💡 How to get better results</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginBottom:8,lineHeight:1.7}}>
+                        Search by <strong style={{color:"rgba(255,255,255,0.75)"}}>skills & tools</strong>, not job titles. Adzuna scans full job descriptions so the more specific your tech stack, the better.
+                      </div>
+                      <div style={{marginBottom:10}}>
+                        <div style={{fontSize:10,color:"#6ee7b7",fontWeight:700,marginBottom:5}}>✅ GOOD — skill-focused:</div>
+                        {["Microsoft Fabric Lakehouse data engineer","Azure Synapse Databricks PySpark","Snowflake dbt SQL analytics engineer","MLflow MLOps machine learning Python"].map(ex=>(
+                          <div key={ex} onClick={()=>{setCustomQuery(ex);setShowCustomInput(true);setShowSearchHelp(false);}}
+                            style={{fontSize:10,color:"rgba(110,231,183,0.8)",background:"rgba(16,185,129,0.08)",border:"1px solid rgba(16,185,129,0.15)",borderRadius:8,padding:"5px 10px",marginBottom:5,cursor:"pointer",fontFamily:"monospace",transition:"all .15s"}}
+                            onMouseEnter={e=>e.currentTarget.style.background="rgba(16,185,129,0.15)"}
+                            onMouseLeave={e=>e.currentTarget.style.background="rgba(16,185,129,0.08)"}>
+                            {ex} <span style={{opacity:.5,fontSize:9}}>← click to use</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:"#fca5a5",fontWeight:700,marginBottom:5}}>❌ AVOID — too generic:</div>
+                        {["Senior Data Engineer","Microsoft Fabric Engineer","Data Analyst","Software Engineer"].map(ex=>(
+                          <div key={ex} style={{fontSize:10,color:"rgba(248,113,113,0.6)",background:"rgba(248,113,113,0.06)",border:"1px solid rgba(248,113,113,0.12)",borderRadius:8,padding:"5px 10px",marginBottom:5,fontFamily:"monospace"}}>
+                            {ex}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.25)",marginTop:8,lineHeight:1.6}}>
+                        💡 Pro tip: Click any green example above to use it as your custom search.
+                      </div>
+                    </div>
+                  )}
+
                   {showCustomInput&&(
-                    <div style={{display:"flex",gap:6}} className="fadeUp">
+                    <div style={{display:"flex",gap:6,marginTop:8}} className="fadeUp">
                       <input value={customQuery} onChange={e=>setCustomQuery(e.target.value)}
-                        placeholder="e.g. Databricks Architect..."
+                        placeholder="e.g. Databricks PySpark Azure data..."
                         onKeyDown={e=>{if(e.key==="Enter"&&customQuery.trim()){const np={id:`c-${Date.now()}`,label:customQuery.slice(0,20),query:customQuery,icon:"✨"};const newPresets=[...customPresets,np];setCustomPresets(newPresets);localStorage.setItem("dh_custom_presets",JSON.stringify(newPresets));setSelectedPreset(np.id);localStorage.setItem("dh_last_preset",np.id);setShowCustomInput(false);setShowQuickSearch(false);setCustomQuery("");}}}
                         style={{flex:1,background:"rgba(0,0,0,0.35)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:10,color:"rgba(255,255,255,0.75)",fontSize:12,padding:"8px 12px"}}/>
                       <button onClick={()=>{if(customQuery.trim()){const np={id:`c-${Date.now()}`,label:customQuery.slice(0,20),query:customQuery,icon:"✨"};const newPresets=[...customPresets,np];setCustomPresets(newPresets);localStorage.setItem("dh_custom_presets",JSON.stringify(newPresets));setSelectedPreset(np.id);localStorage.setItem("dh_last_preset",np.id);setShowCustomInput(false);setShowQuickSearch(false);setCustomQuery("");}}}
