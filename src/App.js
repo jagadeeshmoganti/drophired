@@ -411,10 +411,13 @@ export default function App() {
     adzuna_key: localStorage.getItem("dh_adzuna_key") || "",
   });
   const [searchMode, setSearchMode] = useState("jobboard"); // jobboard | careers
-  const [selectedPreset, setSelectedPreset] = useState("p1");
+  const [selectedPreset, setSelectedPreset] = useState(() => localStorage.getItem("dh_last_preset") || "");
   const [customQuery, setCustomQuery] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
-  const [customPresets, setCustomPresets] = useState([]);
+  const [customPresets, setCustomPresets] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dh_custom_presets") || "[]"); }
+    catch { return []; }
+  });
   const [dateFilter, setDateFilter] = useState("1w");
   const [countryFilter, setCountryFilter] = useState("us");
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -922,7 +925,7 @@ export default function App() {
                 <div className="fadeUp" style={{marginTop:10}}>
                   <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
                     {[...PRESET_SEARCHES,...customPresets].map((p,i)=>(
-                      <button key={p.id} onClick={()=>{setSelectedPreset(p.id);setShowCustomInput(false);setShowQuickSearch(false);}}
+                      <button key={p.id} onClick={()=>{setSelectedPreset(p.id);localStorage.setItem("dh_last_preset",p.id);setShowCustomInput(false);setShowQuickSearch(false);}}
                         className={selectedPreset===p.id?"pill-active":""}
                         style={{padding:"5px 11px",borderRadius:20,fontSize:11,fontWeight:500,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.45)",display:"flex",alignItems:"center",gap:5,transition:"all .15s"}}>
                         <span style={{fontSize:12}}>{p.icon}</span>{p.label}
@@ -937,9 +940,9 @@ export default function App() {
                     <div style={{display:"flex",gap:6}} className="fadeUp">
                       <input value={customQuery} onChange={e=>setCustomQuery(e.target.value)}
                         placeholder="e.g. Databricks Architect..."
-                        onKeyDown={e=>{if(e.key==="Enter"&&customQuery.trim()){const np={id:`c-${Date.now()}`,label:customQuery.slice(0,20),query:customQuery,icon:"✨"};setCustomPresets(p=>[...p,np]);setSelectedPreset(np.id);setShowCustomInput(false);setShowQuickSearch(false);setCustomQuery("");}}}
+                        onKeyDown={e=>{if(e.key==="Enter"&&customQuery.trim()){const np={id:`c-${Date.now()}`,label:customQuery.slice(0,20),query:customQuery,icon:"✨"};const newPresets=[...customPresets,np];setCustomPresets(newPresets);localStorage.setItem("dh_custom_presets",JSON.stringify(newPresets));setSelectedPreset(np.id);localStorage.setItem("dh_last_preset",np.id);setShowCustomInput(false);setShowQuickSearch(false);setCustomQuery("");}}}
                         style={{flex:1,background:"rgba(0,0,0,0.35)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:10,color:"rgba(255,255,255,0.75)",fontSize:12,padding:"8px 12px"}}/>
-                      <button onClick={()=>{if(customQuery.trim()){const np={id:`c-${Date.now()}`,label:customQuery.slice(0,20),query:customQuery,icon:"✨"};setCustomPresets(p=>[...p,np]);setSelectedPreset(np.id);setShowCustomInput(false);setShowQuickSearch(false);setCustomQuery("");}}}
+                      <button onClick={()=>{if(customQuery.trim()){const np={id:`c-${Date.now()}`,label:customQuery.slice(0,20),query:customQuery,icon:"✨"};const newPresets=[...customPresets,np];setCustomPresets(newPresets);localStorage.setItem("dh_custom_presets",JSON.stringify(newPresets));setSelectedPreset(np.id);localStorage.setItem("dh_last_preset",np.id);setShowCustomInput(false);setShowQuickSearch(false);setCustomQuery("");}}}
                         style={{padding:"8px 14px",background:"rgba(236,72,153,0.15)",border:"1px solid rgba(236,72,153,0.3)",borderRadius:10,color:"#f9a8d4",fontSize:12,fontWeight:700}}>Add</button>
                     </div>
                   )}
@@ -1605,29 +1608,47 @@ export default function App() {
             {onboardStep==="keys"&&(
               <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:20,padding:26}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#c4b5fd",marginBottom:18}}>🔑 Step 1 — Add your free API keys</div>
+                {/* Anthropic Key */}
                 <div style={{marginBottom:16}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.5)",marginBottom:6,display:"flex",justifyContent:"space-between"}}>
-                    Anthropic API Key <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{color:"rgba(167,139,250,0.7)",fontSize:10}}>Get free key →</a>
+                  <div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.5)",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span>🤖 Anthropic API Key</span>
+                    <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{color:"rgba(167,139,250,0.8)",fontSize:11,fontWeight:700,background:"rgba(99,102,241,0.12)",padding:"2px 10px",borderRadius:20,border:"1px solid rgba(99,102,241,0.2)"}}>Get free key →</a>
                   </div>
                   <input value={settingsForm.anthropic} onChange={e=>setSettingsForm(p=>({...p,anthropic:e.target.value}))}
                     placeholder="sk-ant-api03-..."
                     style={{width:"100%",background:"rgba(0,0,0,0.4)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:12,padding:"10px 14px",fontFamily:"monospace",outline:"none"}}/>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:3}}>Powers all AI features — $5 free credits to start</div>
+                  <div style={{marginTop:8,padding:"10px 12px",background:"rgba(99,102,241,0.06)",borderRadius:9,border:"1px solid rgba(99,102,241,0.12)"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"rgba(167,139,250,0.8)",marginBottom:4}}>How to get it:</div>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",lineHeight:1.8}}>
+                      1. Go to <strong style={{color:"rgba(167,139,250,0.7)"}}>console.anthropic.com</strong> → Sign up free<br/>
+                      2. Click <strong style={{color:"rgba(167,139,250,0.7)"}}>API Keys</strong> in the left sidebar<br/>
+                      3. Click <strong style={{color:"rgba(167,139,250,0.7)"}}>Create Key</strong> → copy the key<br/>
+                      4. New accounts get <strong style={{color:"#6ee7b7"}}>$5 free credits</strong> (~500 job analyses)
+                    </div>
+                  </div>
                 </div>
+
+                {/* Adzuna Keys */}
                 <div style={{marginBottom:16}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.5)",marginBottom:6,display:"flex",justifyContent:"space-between"}}>
-                    Adzuna App ID <a href="https://developer.adzuna.com" target="_blank" rel="noopener noreferrer" style={{color:"rgba(110,231,183,0.7)",fontSize:10}}>Get free key →</a>
+                  <div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.5)",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span>🔍 Adzuna App ID + Key</span>
+                    <a href="https://developer.adzuna.com" target="_blank" rel="noopener noreferrer" style={{color:"rgba(110,231,183,0.8)",fontSize:11,fontWeight:700,background:"rgba(16,185,129,0.1)",padding:"2px 10px",borderRadius:20,border:"1px solid rgba(16,185,129,0.2)"}}>Get free keys →</a>
                   </div>
                   <input value={settingsForm.adzuna_id} onChange={e=>setSettingsForm(p=>({...p,adzuna_id:e.target.value}))}
-                    placeholder="e.g. a1b2c3d4"
-                    style={{width:"100%",background:"rgba(0,0,0,0.4)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:12,padding:"10px 14px",fontFamily:"monospace",outline:"none"}}/>
-                </div>
-                <div style={{marginBottom:22}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.5)",marginBottom:6}}>Adzuna App Key</div>
+                    placeholder="App ID — e.g. a1b2c3d4"
+                    style={{width:"100%",background:"rgba(0,0,0,0.4)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:12,padding:"10px 14px",fontFamily:"monospace",outline:"none",marginBottom:8}}/>
                   <input value={settingsForm.adzuna_key} onChange={e=>setSettingsForm(p=>({...p,adzuna_key:e.target.value}))}
-                    placeholder="e.g. 8b6a3c566d97..."
+                    placeholder="App Key — e.g. a1b2c3d4e5f6..."
                     style={{width:"100%",background:"rgba(0,0,0,0.4)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:12,padding:"10px 14px",fontFamily:"monospace",outline:"none"}}/>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:3}}>Free job search — 1000 searches/month</div>
+                  <div style={{marginTop:8,padding:"10px 12px",background:"rgba(16,185,129,0.05)",borderRadius:9,border:"1px solid rgba(16,185,129,0.12)"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"rgba(110,231,183,0.8)",marginBottom:4}}>How to get it:</div>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",lineHeight:1.8}}>
+                      1. Go to <strong style={{color:"rgba(110,231,183,0.7)"}}>developer.adzuna.com</strong> → Register<br/>
+                      2. Select <strong style={{color:"rgba(110,231,183,0.7)"}}>Personal or academic research</strong><br/>
+                      3. Copy your <strong style={{color:"rgba(110,231,183,0.7)"}}>App ID</strong> and <strong style={{color:"rgba(110,231,183,0.7)"}}>App Key</strong> from the dashboard<br/>
+                      4. Free tier = <strong style={{color:"#6ee7b7"}}>1,000 searches/month</strong>
+                    </div>
+                  </div>
                 </div>
                 <button onClick={saveKeys} style={{width:"100%",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:800,padding:"13px 0",boxShadow:"0 0 40px rgba(99,102,241,0.4)",cursor:"pointer"}}>
                   Continue → Set Up Profile
@@ -1732,23 +1753,32 @@ export default function App() {
               </div>
               <button onClick={()=>setShowSettings(false)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"rgba(255,255,255,0.45)",fontSize:17,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#c4b5fd",marginBottom:6}}>Anthropic API Key</div>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#c4b5fd",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                🤖 Anthropic API Key
+                <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"rgba(167,139,250,0.7)",background:"rgba(99,102,241,0.1)",padding:"2px 9px",borderRadius:20,border:"1px solid rgba(99,102,241,0.2)"}}>console.anthropic.com →</a>
+              </div>
               <input value={settingsForm.anthropic} onChange={e=>setSettingsForm(p=>({...p,anthropic:e.target.value}))}
                 placeholder="sk-ant-api03-..."
                 style={{width:"100%",background:"rgba(0,0,0,0.4)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:12,padding:"9px 13px",fontFamily:"monospace",outline:"none"}}/>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.25)",marginTop:4,lineHeight:1.6}}>Sign up → API Keys → Create Key. New accounts get $5 free credits.</div>
             </div>
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#6ee7b7",marginBottom:6}}>Adzuna App ID</div>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#6ee7b7",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                🔍 Adzuna App ID
+                <a href="https://developer.adzuna.com" target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"rgba(110,231,183,0.7)",background:"rgba(16,185,129,0.08)",padding:"2px 9px",borderRadius:20,border:"1px solid rgba(16,185,129,0.18)"}}>developer.adzuna.com →</a>
+              </div>
               <input value={settingsForm.adzuna_id} onChange={e=>setSettingsForm(p=>({...p,adzuna_id:e.target.value}))}
                 placeholder="e.g. a1b2c3d4"
                 style={{width:"100%",background:"rgba(0,0,0,0.4)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:12,padding:"9px 13px",fontFamily:"monospace",outline:"none"}}/>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.25)",marginTop:4,lineHeight:1.6}}>Register → Personal research → copy App ID from dashboard.</div>
             </div>
-            <div style={{marginBottom:24}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#6ee7b7",marginBottom:6}}>Adzuna App Key</div>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#6ee7b7",marginBottom:6}}>🔍 Adzuna App Key</div>
               <input value={settingsForm.adzuna_key} onChange={e=>setSettingsForm(p=>({...p,adzuna_key:e.target.value}))}
-                placeholder="e.g. 8b6a3c566d97..."
+                placeholder="e.g. a1b2c3d4e5f6..."
                 style={{width:"100%",background:"rgba(0,0,0,0.4)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:12,padding:"9px 13px",fontFamily:"monospace",outline:"none"}}/>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.25)",marginTop:4,lineHeight:1.6}}>Found next to App ID on your Adzuna dashboard. Free 1,000 searches/month.</div>
             </div>
             <div style={{marginTop:14,borderTop:"1px solid rgba(255,255,255,0.06)",paddingTop:14}}>
               <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",marginBottom:8}}>Update Resume</div>
