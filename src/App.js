@@ -138,7 +138,7 @@ const searchRealJobs = async (query, dateFilter, country = "us") => {
   });
   // Adzuna supports CORS from browser — no extra headers needed
   const res = await fetch(
-    `/adzuna/v1/api/jobs/${countryCode}/search/1?${params}`
+    `https://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?${params}`
   );
   if (!res.ok) {
     console.error("Adzuna error:", res.status, await res.text());
@@ -220,7 +220,7 @@ const searchApifyJobs = async (companies, query, dateFilter = "1m", country = "u
             sort_by: "date",
           });
           const res = await fetch(
-            `/adzuna/v1/api/jobs/${countryCode}/search/1?${params}`,
+            `https://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?${params}`,
             { headers: { "Content-Type": "application/json" } }
           );
           const data = await res.json();
